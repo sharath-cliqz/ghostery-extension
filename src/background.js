@@ -45,6 +45,8 @@ import { allowAllwaysC2P } from './utils/click2play';
 import * as common from './utils/common';
 import * as utils from './utils/utils';
 
+
+
 // class instantiation
 const button = new Button();
 const events = new Events();
@@ -63,6 +65,7 @@ const IS_EDGE = (BROWSER_INFO.name === 'edge');
 const VERSION_CHECK_URL = `https://${CDN_SUB_DOMAIN}.ghostery.com/update/version`;
 const OFFERS_HANDLER_ID = 'ghostery';
 const REAL_ESTATE_ID = 'ghostery';
+let OFFERS_ACTION_IDS;
 const onBeforeRequest = events.onBeforeRequest.bind(events);
 const onHeadersReceived = events.onHeadersReceived.bind(events);
 
@@ -453,6 +456,8 @@ function handlePurplebox(name, message, tab_id, callback) {
 
 /**
  * Reformats messages coming from context script and sends them to Cliqz.
+ * All possible action ids are in browser-core/offers-v2/offers/offers-def
+ * They are pulled in and assigned to OFFERS_ACTION_IDS during Offers initialization
  * @memberOf Background
  *
  * @param  {Object} 	message 	message data
@@ -472,11 +477,11 @@ function reportCliqzOffer(message) {
 	};
 	// check the type of the message
 	if (message.reason === 'offerShown') {
-		msgToOffersCore.data.action_id = 'offer_shown';
+		msgToOffersCore.data.action_id = OFFERS_ACTION_IDS.AID_OFFER_SHOWN;
 	} else if (message.reason === 'closeButton') {
-		msgToOffersCore.data.action_id = 'offer_closed';
+		msgToOffersCore.data.action_id = OFFERS_ACTION_IDS.AID_OFFER_CLOSED;
 	} else if (message.reason === 'link') {
-		msgToOffersCore.data.action_id = 'offer_ca_action';
+		msgToOffersCore.data.action_id = OFFERS_ACTION_IDS.AID_OFFER_CALL_TO_ACTION;
 	} else {
 		// TODO: @serge how do we log here an error?
 		log('[offers_log]: unknown message reason: ', message.reason);
@@ -1031,20 +1036,25 @@ adblocker.on('enabled', () => {
 
 offers.on('enabled', () => {
 	offers.isReady().then(() => {
-		log('IN OFFERS ON ENABLED', offers, messageCenter);
-
-		offers.action('setConfiguration', {
-			config_location: 'de',
-			triggersBE: DEBUG ? 'http://offers-api-stage.clyqz.com:81' : 'https://offers-api.cliqz.com',
-			showConsoleLogs: (DEBUG === true),
-			offersLogsEnabled: (DEBUG === true),
-			offersDevFlag: (DEBUG === true),
-			offersTelemetryFreq: DEBUG ? '10' : ''
-		});
-
-		registerWithOffers(offers, true)
+		log('IN OFFERS ON ENABLED', offers);
+		offers.action('getActionID')
+		.then(actionId => {
+			OFFERS_ACTION_IDS = actionId;
+		})
 		.then(() => {
-			setCliqzModuleEnabled(messageCenter, true);
+			offers.action('setConfiguration', {
+				config_location: 'de',
+				triggersBE: DEBUG ? 'http://offers-api-stage.clyqz.com:81' : 'https://offers-api.cliqz.com',
+				showConsoleLogs: (DEBUG === true),
+				offersLogsEnabled: (DEBUG === true),
+				offersDevFlag: (DEBUG === true),
+				offersTelemetryFreq: DEBUG ? '10' : '' 
+			}).then(() => {
+				registerWithOffers(offers, true)
+				.then(() => {
+					setCliqzModuleEnabled(messageCenter, true);
+				});
+			});
 		});
 	});
 });/**
